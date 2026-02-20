@@ -1,4 +1,4 @@
-name: Build iOS App
+name: Build iOS App Optimized
 
 on:
   workflow_dispatch:
@@ -8,61 +8,53 @@ jobs:
     runs-on: macos-latest
     
     steps:
+      # 1. تحميل الكود (آخر نسخة فقط لتوفير الوقت)
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
+      # 2. إعداد Node.js مع تفعيل الكاش التلقائي لـ npm
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: 'npm'
 
+      # 3. تنصيب المكتبات (سيكون سريعاً جداً إذا لم تتغير package-lock.json)
       - name: Install Dependencies
         run: npm install --legacy-peer-deps
 
-      # تنظيف شامل للكاش القديم
-      - name: Clean Old Builds
-        run: |
-          rm -rf www
-          rm -rf dist
-          rm -rf ios
-
+      # 4. بناء ملفات الويب (تأكد من أن السكريبت محسن في package.json)
       - name: Build Web Assets
         run: npm run build
 
-      # إنشاء منصة iOS من الصفر
-      - name: Create iOS Platform
-        run: |
-          npx cap add ios
-          npx cap sync ios
+      # 5. مزامنة Capacitor (أسرع من حذف وإضافة المنصة من الصفر)
+      - name: Capacitor Sync
+        run: npx cap sync ios
 
-      - name: Copy GoogleService-Info.plist to iOS
+      # 6. إضافة ملف GoogleService (فقط إذا وجد)
+      - name: Copy GoogleService-Info.plist
         run: |
-          if [ -f "GoogleService-Info.plist" ]; then
-            echo "📄 Found GoogleService-Info.plist, copying..."
-            cp GoogleService-Info.plist ios/App/App/
-          else
-            echo "⚠️ GoogleService-Info.plist NOT found! Skipping..."
-          fi
+          [ -f "GoogleService-Info.plist" ] && cp GoogleService-Info.plist ios/App/App/ || echo "⚠️ Skip plist"
 
+      # 7. توليد الأيقونات (تعمل فقط عند الحاجة)
       - name: Generate App Icons
         run: npx capacitor-assets generate --ios || true
 
-      - name: Inject Google URL Scheme
+      # 8. تعديل إعدادات الـ Info.plist (PlistBuddy سريع جداً)
+      - name: Inject iOS Configs
         run: |
           PLIST="ios/App/App/Info.plist"
           REVERSED_CLIENT_ID="com.googleusercontent.apps.87037584903-3uc4aeg3nc5lk3pu8crjbaad184bhjth"
-          
           /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" $PLIST || true
           /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" $PLIST || true
           /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" $PLIST || true
           /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string $REVERSED_CLIENT_ID" $PLIST || true
-
-      - name: Inject iOS Permissions
-        run: |
-          PLIST="ios/App/App/Info.plist"
           /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string 'Profile Picture'" $PLIST || true
           /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string 'Profile Picture'" $PLIST || true
 
+      # 9. بناء الأرشيف (هذه الخطوة تأخذ أغلب الوقت)
       - name: Build Xcode Archive
         run: |
           xcodebuild -workspace ios/App/App.xcworkspace \
@@ -71,28 +63,23 @@ jobs:
                      -destination 'generic/platform=iOS' \
                      -archivePath App.xcarchive \
                      -allowProvisioningUpdates \
+                     -quiet \
                      archive \
                      CODE_SIGNING_ALLOWED=NO
 
+      # 10. تحضير ملف الـ IPA النهائي
       - name: Prepare IPA
         run: |
-          # إنشاء مجلد Payload في المجلد الرئيسي مباشرة لتجنب تداخل المسارات
           mkdir -p Payload
-          # نسخ ملف التطبيق المستخرج من الـ Archive
           cp -R App.xcarchive/Products/Applications/App.app Payload/
-          # ضغط المجلد بصيغة .ipa
           zip -r Rased-Lite-app-iPhone.ipa Payload
-          # عرض محتويات المجلد للتأكد من وجود الملف
-          ls -lh *.ipa
+          ls -lh Rased-Lite-app-iPhone.ipa
 
-      # خطوة إضافية للتأكد من المسار في حال الفشل
-      - name: Debug Find IPA
-        run: find . -name "*.ipa"
-
+      # 11. رفع الملف
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: Rased-Lite-app-iPhone-Fixed-IPA
           path: Rased-Lite-app-iPhone.ipa
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 5
