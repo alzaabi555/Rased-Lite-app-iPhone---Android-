@@ -78,7 +78,7 @@ jobs:
         run: |
           mkdir -p build/Payload
           cp -R App.xcarchive/Products/Applications/App.app build/Payload/
-          cd build && zip -r ../StudentManager.ipa Payload/
+          cd build && zip -r ../Rased-Lite-app-iPhone.ipa Payload/
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
