@@ -83,5 +83,5 @@ jobs:
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: StudentManager-Fixed-IPA
-          path: StudentManager.ipa
+          name: Rased-Lite-app-iPhone-Fixed-IPA
+          path: Rased-Lite-app-iPhone.ipa
